@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Star Fleet Command</title>
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{ "imports": { "three": "./lib/three.module.js", "three/addons/": "./lib/addons/" } }
+</script>
+<script src="lib/peerjs.min.js"></script>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<canvas id="overlay"></canvas>
+
+<!-- ===================== MAIN MENU ===================== -->
+<div id="menu" class="screen">
+  <div class="menu-box">
+    <h1>STAR FLEET<span>COMMAND</span></h1>
+    <p class="tag">Command a dreadnought. Lead an armada. Survive the void.</p>
+    <label>Commander name<input id="nameInput" maxlength="16" placeholder="Admiral"></label>
+    <div class="row">
+      <button id="btnHost" class="primary">Host a Battle</button>
+      <div class="join">
+        <input id="roomInput" maxlength="6" placeholder="ROOM CODE" style="text-transform:uppercase">
+        <button id="btnJoin">Join</button>
+      </div>
+    </div>
+    <div id="menuStatus" class="status"></div>
+    <details class="help"><summary>How to play</summary>
+      <ul>
+        <li><b>Select</b> ships with left click / drag box. <b>Shift</b> adds. <b>Ctrl+1–9</b> assigns a group, <b>1–9</b> recalls it. <b>Tab</b> selects the flagship.</li>
+        <li><b>Right click</b>: move. On an enemy: attack. On an ally: escort. <b>A</b> + click: attack-move. <b>S</b>: hold position.</li>
+        <li><b>Direct Control</b> (toggle with <b>C</b> or the button): WASD flies the flagship, mouse aims, left click fires the heavy cannons.</li>
+        <li>Flagship abilities: <b>Q</b> Shield Overcharge, <b>E</b> EMP Nova, <b>R</b> Spinal Lance (aim at cursor), <b>F</b> Launch Wing, <b>T</b> Micro-Jump to cursor.</li>
+        <li>Spend <b>Command Points</b> (earned over time and from kills) to warp in reinforcements.</li>
+        <li>Camera: edge of screen / arrow keys to pan, scroll to zoom, <b>Space</b> to center on flagship.</li>
+      </ul>
+    </details>
+  </div>
+</div>
+
+<!-- ===================== LOBBY ===================== -->
+<div id="lobby" class="screen hidden">
+  <div class="menu-box wide">
+    <h2>BATTLE LOBBY <span id="roomCode" class="code"></span></h2>
+    <p class="tag">Share the room code. Friends join from the main menu.</p>
+    <div class="lobby-grid">
+      <div>
+        <h3>Commanders</h3>
+        <ul id="playerList"></ul>
+      </div>
+      <div id="lobbyOptions">
+        <h3>Battle settings</h3>
+        <label>Mode
+          <select id="modeSelect">
+            <option value="coop">Co-op: Armada Assault (waves vs AI)</option>
+            <option value="pvp">PvP: Fleet War (team vs team)</option>
+          </select>
+        </label>
+        <label>AI admirals (extra fleets)
+          <select id="aiSelect">
+            <option value="0">None</option><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option>
+          </select>
+        </label>
+        <label>Starting fleet size
+          <select id="fleetSelect">
+            <option value="small">Strike group</option>
+            <option value="medium" selected>Task force</option>
+            <option value="large">Armada</option>
+          </select>
+        </label>
+        <p class="hint" id="teamHint">Click your name to switch team (PvP).</p>
+      </div>
+    </div>
+    <div class="row">
+      <button id="btnStart" class="primary">Launch Battle</button>
+      <button id="btnLeave">Leave</button>
+    </div>
+    <div id="lobbyStatus" class="status"></div>
+  </div>
+</div>
+
+<!-- ===================== HUD ===================== -->
+<div id="hud" class="hidden">
+  <div id="topbar">
+    <div class="pill" id="cpPill">CP <b id="cpVal">0</b></div>
+    <div class="pill" id="modePill">—</div>
+    <div class="pill" id="scorePill">—</div>
+    <div class="pill small" id="pingPill"></div>
+    <div class="pill small" id="fpsPill"></div>
+  </div>
+
+  <div id="alerts"></div>
+
+  <div id="flagPanel">
+    <div class="flag-name" id="flagName">SOVEREIGN</div>
+    <div class="bar hull"><div id="flagHull"></div></div>
+    <div class="bar shield"><div id="flagShield"></div></div>
+    <div id="abilities">
+      <div class="ab" data-key="Q"><div class="cd"></div><span class="k">Q</span><span class="n">Overcharge</span></div>
+      <div class="ab" data-key="E"><div class="cd"></div><span class="k">E</span><span class="n">EMP Nova</span></div>
+      <div class="ab" data-key="R"><div class="cd"></div><span class="k">R</span><span class="n">Spinal Lance</span></div>
+      <div class="ab" data-key="F"><div class="cd"></div><span class="k">F</span><span class="n">Launch Wing</span></div>
+      <div class="ab" data-key="T"><div class="cd"></div><span class="k">T</span><span class="n">Micro-Jump</span></div>
+    </div>
+    <button id="btnDirect" class="toggle">DIRECT CONTROL <span>[C]</span></button>
+  </div>
+
+  <div id="selPanel">
+    <div id="selList"></div>
+  </div>
+
+  <div id="cmdPanel">
+    <div class="cmd-row">
+      <button data-cmd="attackmove" title="Attack-move (A)">ATTACK<br>MOVE</button>
+      <button data-cmd="hold" title="Hold position (S)">HOLD</button>
+      <button data-cmd="escort" title="Escort flagship (G)">ESCORT<br>FLAG</button>
+      <button data-cmd="retreat" title="Retreat to flagship (H)">RETREAT</button>
+    </div>
+    <div class="cmd-row">
+      <span class="lbl">Formation</span>
+      <button data-form="wedge" class="on">Wedge</button>
+      <button data-form="line">Line</button>
+      <button data-form="column">Column</button>
+      <button data-form="screen">Screen</button>
+    </div>
+    <div class="cmd-row">
+      <span class="lbl">Stance</span>
+      <button data-stance="aggressive" class="on">Aggressive</button>
+      <button data-stance="defensive">Defensive</button>
+      <button data-stance="passive">Passive</button>
+    </div>
+  </div>
+
+  <div id="reinPanel">
+    <div class="lbl">REINFORCEMENTS</div>
+    <div id="reinList"></div>
+  </div>
+
+  <div id="minimapWrap"><canvas id="minimap" width="220" height="220"></canvas></div>
+
+  <div id="playersHud"></div>
+</div>
+
+<div id="gameover" class="screen hidden">
+  <div class="menu-box">
+    <h2 id="goTitle">VICTORY</h2>
+    <p id="goText"></p>
+    <button id="btnBackMenu" class="primary">Back to Menu</button>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
